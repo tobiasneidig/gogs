@@ -533,7 +533,8 @@ func (err ErrCommentNotExist) Error() string {
 //         \/    \/    \/     \/
 
 type ErrLabelNotExist struct {
-	ID int64
+	LabelID int64
+	RepoID  int64
 }
 
 func IsErrLabelNotExist(err error) bool {
@@ -542,7 +543,7 @@ func IsErrLabelNotExist(err error) bool {
 }
 
 func (err ErrLabelNotExist) Error() string {
-	return fmt.Sprintf("label does not exist [id: %d]", err.ID)
+	return fmt.Sprintf("label does not exist [label_id: %d, repo_id: %d]", err.LabelID, err.RepoID)
 }
 
 //    _____  .__.__                   __

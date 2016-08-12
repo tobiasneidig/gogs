@@ -187,9 +187,24 @@ function initInstall() {
         }
     });
 
+    // TODO: better handling of exclusive relations.
     $('#offline-mode input').change(function () {
         if ($(this).is(':checked')) {
             $('#disable-gravatar').checkbox('check');
+            $('#federated-avatar-lookup').checkbox('uncheck');
+        }
+    });
+    $('#disable-gravatar input').change(function () {
+        if ($(this).is(':checked')) {
+            $('#federated-avatar-lookup').checkbox('uncheck');
+        } else {
+            $('#offline-mode').checkbox('uncheck');
+        }
+    });
+    $('#federated-avatar-lookup input').change(function () {
+        if ($(this).is(':checked')) {
+            $('#disable-gravatar').checkbox('uncheck');
+            $('#offline-mode').checkbox('uncheck');
         }
     });
     $('#disable-registration input').change(function () {
@@ -248,6 +263,22 @@ function initRepository() {
                 $prompt_span.show();
             } else {
                 $prompt_span.hide();
+            }
+        });
+
+        // Enable or select internal/external wiki system and issue tracker.
+        $('.enable-system').change(function () {
+            if (this.checked) {
+                $($(this).data('target')).removeClass('disabled');
+            } else {
+                $($(this).data('target')).addClass('disabled');
+            }
+        });
+        $('.enable-system-radio').change(function () {
+            if (this.value == 'false') {
+                $($(this).data('target')).addClass('disabled');
+            } else if (this.value == 'true') {
+                $($(this).data('target')).removeClass('disabled');
             }
         });
     }
@@ -410,7 +441,7 @@ function initRepository() {
             if (confirm($this.data('locale'))) {
                 $.post($this.data('url'), {
                     "_csrf": csrf
-                }).success(function() {
+                }).success(function () {
                     $('#' + $this.data('comment-id')).remove();
                 });
             }
@@ -471,11 +502,11 @@ function initRepository() {
     }
 }
 
-function initRepositoryCollaboration(){
+function initRepositoryCollaboration() {
     console.log('initRepositoryCollaboration');
 
 // Change collaborator access mode
-    $('.access-mode.menu .item').click(function(){
+    $('.access-mode.menu .item').click(function () {
         var $menu = $(this).parent();
         $.post($menu.data('url'), {
             "_csrf": csrf,
@@ -971,11 +1002,11 @@ $(document).ready(function () {
     $('.show-modal.button').click(function () {
         $($(this).data('modal')).modal('show');
     });
-    $('.delete-post.button').click(function(){
+    $('.delete-post.button').click(function () {
         var $this = $(this);
-        $.post($this.data('request-url'),{
+        $.post($this.data('request-url'), {
             "_csrf": csrf
-        }).done(function(){
+        }).done(function () {
             window.location.href = $this.data('done-url');
         });
     });
@@ -1057,7 +1088,7 @@ $(window).load(function () {
                     b = c;
                 }
                 var classes = [];
-                for (i = a; i <= b; i++) {
+                for (var i = a; i <= b; i++) {
                     classes.push('.L' + i);
                 }
                 $list.filter(classes.join(',')).addClass('active');
@@ -1071,22 +1102,6 @@ $(window).load(function () {
 
     // Code view.
     if ($('.code-view .linenums').length > 0) {
-        var $block = $('.code-view .linenums');
-        var lines = $block.html().split("\n");
-        $block.html('');
-
-        var $num_list = $('.code-view .lines-num');
-
-        // Building blocks.
-        var $toappendblock = [];
-        var $toappendnum_list = [];
-        for (var i = 0; i < lines.length; i++) {
-            $toappendblock.push('<li class="L' + (i + 1) + '" rel="L' + (i + 1) + '">' + lines[i] + '</li>');
-            $toappendnum_list.push('<span id="L' + (i + 1) + '">' + (i + 1) + '</span>');
-        }
-        $block.append($toappendblock.join(''));
-        $num_list.append($toappendnum_list.join(''));
-
         $(document).on('click', '.lines-num span', function (e) {
             var $select = $(this);
             var $list = $select.parent().siblings('.lines-code').find('ol.linenums > li');
@@ -1129,7 +1144,7 @@ $(window).load(function () {
     }
 });
 
-$(function() {
-    if ($('.user.signin').length >0) return;
-	$('form').areYouSure();
+$(function () {
+    if ($('.user.signin').length > 0) return;
+    $('form').areYouSure();
 });

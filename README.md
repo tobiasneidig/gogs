@@ -3,7 +3,7 @@ Gogs - Go Git Service [![Build Status](https://travis-ci.org/gogits/gogs.svg?bra
 
 ![](https://github.com/gogits/gogs/blob/master/public/img/gogs-large-resize.png?raw=true)
 
-##### Current tip version: 0.9.59 (see [Releases](https://github.com/gogits/gogs/releases) for binary versions)
+##### Current tip version: 0.9.74 (see [Releases](https://github.com/gogits/gogs/releases) for binary versions)
 
 | Web | UI  | Preview  |
 |:-------------:|:-------:|:-------:|
@@ -18,7 +18,7 @@ Gogs - Go Git Service [![Build Status](https://travis-ci.org/gogits/gogs.svg?bra
 3. The demo site [try.gogs.io](https://try.gogs.io) is running under `develop` branch.
 4. If you think there are vulnerabilities in the project, please talk privately to **u@gogs.io**. Thanks!
 5. If you're interested in using APIs, we have experimental support with [documentation](https://github.com/gogits/go-gogs-client/wiki).
-6. If your team/company is using Gogs and would like to put your logo on [our website](http://gogs.io), contact us by any means.
+6. If your team/company is using Gogs and would like to put your logo on [our website](https://gogs.io), contact us by any means.
 
 [简体中文](README_ZH.md)
 
@@ -28,11 +28,11 @@ The goal of this project is to make the easiest, fastest, and most painless way 
 
 ## Overview
 
-- Please see the [Documentation](http://gogs.io/docs/intro) for common usages and change log.
+- Please see the [Documentation](https://gogs.io/docs/intro) for common usages and change log.
 - See the [Trello Board](https://trello.com/b/uxAoeLUl/gogs-go-git-service) to follow the develop team.
 - Want to try it before doing anything else? Do it [online](https://try.gogs.io/gogs/gogs)!
-- Having trouble? Get help with [Troubleshooting](http://gogs.io/docs/intro/troubleshooting.html) or [User Forum](https://discuss.gogs.io/).
-- Want to help with localization? Check out the [guide](http://gogs.io/docs/features/i18n.html)!
+- Having trouble? Get help with [Troubleshooting](https://gogs.io/docs/intro/troubleshooting.html) or [User Forum](https://discuss.gogs.io/).
+- Want to help with localization? Check out the [guide](https://gogs.io/docs/features/i18n.html)!
 
 ## Features
 
@@ -45,7 +45,7 @@ The goal of this project is to make the easiest, fastest, and most painless way 
 - Repository Git hooks/deploy keys
 - Repository issues, pull requests and wiki
 - Add/Remove repository collaborators
-- Gravatar and custom source
+- Gravatar and Federated avatar with custom source
 - Mail service
 - Administration panel
 - Supports MySQL, PostgreSQL, SQLite3 and [TiDB](https://github.com/pingcap/tidb) (experimental)
@@ -63,13 +63,13 @@ The goal of this project is to make the easiest, fastest, and most painless way 
 
 ## Installation
 
-Make sure you install the [prerequisites](http://gogs.io/docs/installation) first.
+Make sure you install the [prerequisites](https://gogs.io/docs/installation) first.
 
 There are 5 ways to install Gogs:
 
-- [Install from binary](http://gogs.io/docs/installation/install_from_binary.html)
-- [Install from source](http://gogs.io/docs/installation/install_from_source.html)
-- [Install from packages](http://gogs.io/docs/installation/install_from_packages.html)
+- [Install from binary](https://gogs.io/docs/installation/install_from_binary.html)
+- [Install from source](https://gogs.io/docs/installation/install_from_source.html)
+- [Install from packages](https://gogs.io/docs/installation/install_from_packages.html)
 - [Ship with Docker](https://github.com/gogits/gogs/tree/master/docker)
 - [Install with Vagrant](https://github.com/geerlingguy/ansible-vagrant-examples/tree/master/gogs)
 
@@ -87,6 +87,7 @@ There are 5 ways to install Gogs:
 
 ### Screencasts
 
+- [How to install Gogs on a Linux Server (DigitalOcean)](https://www.youtube.com/watch?v=deSfX0gqefE)
 - [Instalando Gogs no Ubuntu](https://www.youtube.com/watch?v=4UkHAR1F7ZA) (Português)
 
 ### Deploy to Cloud

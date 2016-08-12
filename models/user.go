@@ -230,8 +230,11 @@ func (u *User) GenerateRandomAvatar() error {
 	return nil
 }
 
+// RelAvatarLink returns relative avatar link to the site domain,
+// which includes app sub-url as prefix. However, it is possible
+// to return full URL if user enables Gravatar-like service.
 func (u *User) RelAvatarLink() string {
-	defaultImgUrl := "/img/avatar_default.png"
+	defaultImgUrl := setting.AppSubUrl + "/img/avatar_default.png"
 	if u.ID == -1 {
 		return defaultImgUrl
 	}
@@ -241,7 +244,7 @@ func (u *User) RelAvatarLink() string {
 		if !com.IsExist(u.CustomAvatarPath()) {
 			return defaultImgUrl
 		}
-		return "/avatars/" + com.ToStr(u.ID)
+		return setting.AppSubUrl + "/avatars/" + com.ToStr(u.ID)
 	case setting.DisableGravatar, setting.OfflineMode:
 		if !com.IsExist(u.CustomAvatarPath()) {
 			if err := u.GenerateRandomAvatar(); err != nil {
@@ -249,16 +252,16 @@ func (u *User) RelAvatarLink() string {
 			}
 		}
 
-		return "/avatars/" + com.ToStr(u.ID)
+		return setting.AppSubUrl + "/avatars/" + com.ToStr(u.ID)
 	}
-	return setting.GravatarSource + u.Avatar
+	return base.AvatarLink(u.AvatarEmail)
 }
 
-// AvatarLink returns user avatar link.
+// AvatarLink returns user avatar absolute link.
 func (u *User) AvatarLink() string {
 	link := u.RelAvatarLink()
 	if link[0] == '/' && link[1] != '/' {
-		return strings.TrimSuffix(setting.AppUrl, "/") + link
+		return setting.AppUrl + link[1:]
 	}
 	return link
 }

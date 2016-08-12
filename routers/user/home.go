@@ -77,7 +77,7 @@ func retrieveFeeds(ctx *context.Context, ctxUser *models.User, userID, offset in
 				ctx.Handle(500, "GetUserByName", err)
 				return
 			}
-			unameAvatars[act.ActUserName] = u.AvatarLink()
+			unameAvatars[act.ActUserName] = u.RelAvatarLink()
 		}
 
 		act.ActAvatar = unameAvatars[act.ActUserName]
@@ -202,7 +202,7 @@ func Issues(ctx *context.Context) {
 	var err error
 	var repos []*models.Repository
 	if ctxUser.IsOrganization() {
-		repos, _, err = ctxUser.GetUserRepositories(ctx.User.ID, 1, ctx.User.NumRepos)
+		repos, _, err = ctxUser.GetUserRepositories(ctx.User.ID, 1, ctxUser.NumRepos)
 		if err != nil {
 			ctx.Handle(500, "GetRepositories", err)
 			return
@@ -220,7 +220,8 @@ func Issues(ctx *context.Context) {
 	showRepos := make([]*models.Repository, 0, len(repos))
 	for _, repo := range repos {
 		if (isPullList && repo.NumPulls == 0) ||
-			(!isPullList && repo.NumIssues == 0) {
+			(!isPullList &&
+				(!repo.EnableIssues || repo.EnableExternalTracker || repo.NumIssues == 0)) {
 			continue
 		}
 

@@ -8,6 +8,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"io/ioutil"
+	"net"
 	"net/http"
 	"net/http/fcgi"
 	"os"
@@ -86,9 +87,9 @@ func checkVersion() {
 		{"github.com/go-macaron/session", session.Version, "0.1.6"},
 		{"github.com/go-macaron/toolbox", toolbox.Version, "0.1.0"},
 		{"gopkg.in/ini.v1", ini.Version, "1.8.4"},
-		{"gopkg.in/macaron.v1", macaron.Version, "1.1.4"},
-		{"github.com/gogits/git-module", git.Version, "0.3.3"},
-		{"github.com/gogits/go-gogs-client", gogs.Version, "0.7.4"},
+		{"gopkg.in/macaron.v1", macaron.Version, "1.1.7"},
+		{"github.com/gogits/git-module", git.Version, "0.3.5"},
+		{"github.com/gogits/go-gogs-client", gogs.Version, "0.10.4"},
 	}
 	for _, c := range checkers {
 		if !version.Compare(c.Version(), c.Expected, ">=") {
@@ -157,7 +158,7 @@ func newMacaron() *macaron.Macaron {
 	m.Use(cache.Cacher(cache.Options{
 		Adapter:       setting.CacheAdapter,
 		AdapterConfig: setting.CacheConn,
-		Interval:      setting.CacheInternal,
+		Interval:      setting.CacheInterval,
 	}))
 	m.Use(captcha.Captchaer(captcha.Options{
 		SubURL: setting.AppSubUrl,
@@ -226,7 +227,8 @@ func runWeb(ctx *cli.Context) error {
 	m.Group("/user/settings", func() {
 		m.Get("", user.Settings)
 		m.Post("", bindIgnErr(auth.UpdateProfileForm{}), user.SettingsPost)
-		m.Post("/avatar", binding.MultipartForm(auth.UploadAvatarForm{}), user.SettingsAvatar)
+		m.Combo("/avatar").Get(user.SettingsAvatar).
+			Post(binding.MultipartForm(auth.AvatarForm{}), user.SettingsAvatarPost)
 		m.Post("/avatar/delete", user.SettingsDeleteAvatar)
 		m.Combo("/email").Get(user.SettingsEmails).
 			Post(bindIgnErr(auth.AddEmailForm{}), user.SettingsEmailPost)
@@ -323,6 +325,7 @@ func runWeb(ctx *cli.Context) error {
 			defer fr.Close()
 
 			ctx.Header().Set("Cache-Control", "public,max-age=86400")
+			ctx.Header().Set("Content-Disposition", fmt.Sprintf(`inline; filename="%s"`, attach.Name))
 			// Fix #312. Attachments with , in their name are not handled correctly by Google Chrome.
 			// We must put the name in " manually.
 			if err = repo.ServeData(ctx, "\""+attach.Name+"\"", fr); err != nil {
@@ -375,7 +378,7 @@ func runWeb(ctx *cli.Context) error {
 			m.Group("/settings", func() {
 				m.Combo("").Get(org.Settings).
 					Post(bindIgnErr(auth.UpdateOrgSettingForm{}), org.SettingsPost)
-				m.Post("/avatar", binding.MultipartForm(auth.UploadAvatarForm{}), org.SettingsAvatar)
+				m.Post("/avatar", binding.MultipartForm(auth.AvatarForm{}), org.SettingsAvatar)
 				m.Post("/avatar/delete", org.SettingsDeleteAvatar)
 
 				m.Group("/hooks", func() {
@@ -448,11 +451,12 @@ func runWeb(ctx *cli.Context) error {
 
 	m.Get("/:username/:reponame/action/:action", reqSignIn, context.RepoAssignment(), repo.Action)
 	m.Group("/:username/:reponame", func() {
+		// FIXME: should use different URLs but mostly same logic for comments of issue and pull reuqest.
+		// So they can apply their own enable/disable logic on routers.
 		m.Group("/issues", func() {
 			m.Combo("/new", repo.MustEnableIssues).Get(context.RepoRef(), repo.NewIssue).
 				Post(bindIgnErr(auth.CreateIssueForm{}), repo.NewIssuePost)
 
-			m.Combo("/:index/comments").Post(bindIgnErr(auth.CreateCommentForm{}), repo.NewComment)
 			m.Group("/:index", func() {
 				m.Post("/label", repo.UpdateIssueLabel)
 				m.Post("/milestone", repo.UpdateIssueMilestone)
@@ -462,6 +466,7 @@ func runWeb(ctx *cli.Context) error {
 			m.Group("/:index", func() {
 				m.Post("/title", repo.UpdateIssueTitle)
 				m.Post("/content", repo.UpdateIssueContent)
+				m.Combo("/comments").Post(bindIgnErr(auth.CreateCommentForm{}), repo.NewComment)
 			})
 		})
 		m.Group("/comments/:id", func() {
@@ -472,7 +477,7 @@ func runWeb(ctx *cli.Context) error {
 			m.Post("/new", bindIgnErr(auth.CreateLabelForm{}), repo.NewLabel)
 			m.Post("/edit", bindIgnErr(auth.CreateLabelForm{}), repo.UpdateLabel)
 			m.Post("/delete", repo.DeleteLabel)
-		}, reqRepoWriter, context.RepoRef())
+		}, repo.MustEnableIssues, reqRepoWriter, context.RepoRef())
 		m.Group("/milestones", func() {
 			m.Combo("/new").Get(repo.NewMilestone).
 				Post(bindIgnErr(auth.CreateMilestoneForm{}), repo.NewMilestonePost)
@@ -480,13 +485,13 @@ func runWeb(ctx *cli.Context) error {
 			m.Post("/:id/edit", bindIgnErr(auth.CreateMilestoneForm{}), repo.EditMilestonePost)
 			m.Get("/:id/:action", repo.ChangeMilestonStatus)
 			m.Post("/delete", repo.DeleteMilestone)
-		}, reqRepoWriter, context.RepoRef())
+		}, repo.MustEnableIssues, reqRepoWriter, context.RepoRef())
 
 		m.Group("/releases", func() {
 			m.Get("/new", repo.NewRelease)
 			m.Post("/new", bindIgnErr(auth.NewReleaseForm{}), repo.NewReleasePost)
-			m.Get("/edit/:tagname", repo.EditRelease)
-			m.Post("/edit/:tagname", bindIgnErr(auth.EditReleaseForm{}), repo.EditReleasePost)
+			m.Get("/edit/*", repo.EditRelease)
+			m.Post("/edit/*", bindIgnErr(auth.EditReleaseForm{}), repo.EditReleasePost)
 			m.Post("/delete", repo.DeleteRelease)
 		}, reqRepoWriter, context.RepoRef())
 
@@ -530,12 +535,12 @@ func runWeb(ctx *cli.Context) error {
 			m.Get("/src/*", repo.Home)
 			m.Get("/raw/*", repo.SingleDownload)
 			m.Get("/commits/*", repo.RefCommits)
-			m.Get("/commit/:sha([a-z0-9]{40})$", repo.Diff)
+			m.Get("/commit/:sha([a-z0-9]{7,40})$", repo.Diff)
 			m.Get("/forks", repo.Forks)
 		}, context.RepoRef())
-		m.Get("/commit/:sha([a-z0-9]{40})\\.:ext(patch|diff)", repo.RawDiff)
+		m.Get("/commit/:sha([a-z0-9]{7,40})\\.:ext(patch|diff)", repo.RawDiff)
 
-		m.Get("/compare/:before([a-z0-9]{40})\\.\\.\\.:after([a-z0-9]{40})", repo.CompareDiff)
+		m.Get("/compare/:before([a-z0-9]{7,40})\\.\\.\\.:after([a-z0-9]{7,40})", repo.CompareDiff)
 	}, ignSignIn, context.RepoAssignment(), repo.MustBeNotBare)
 	m.Group("/:username/:reponame", func() {
 		m.Get("/stars", repo.Stars)
@@ -573,13 +578,19 @@ func runWeb(ctx *cli.Context) error {
 
 	// Flag for port number in case first time run conflict.
 	if ctx.IsSet("port") {
-		setting.AppUrl = strings.Replace(setting.AppUrl, setting.HttpPort, ctx.String("port"), 1)
-		setting.HttpPort = ctx.String("port")
+		setting.AppUrl = strings.Replace(setting.AppUrl, setting.HTTPPort, ctx.String("port"), 1)
+		setting.HTTPPort = ctx.String("port")
 	}
 
-	var err error
-	listenAddr := fmt.Sprintf("%s:%s", setting.HttpAddr, setting.HttpPort)
+	var listenAddr string
+	if setting.Protocol == setting.UNIX_SOCKET {
+		listenAddr = fmt.Sprintf("%s", setting.HTTPAddr)
+	} else {
+		listenAddr = fmt.Sprintf("%s:%s", setting.HTTPAddr, setting.HTTPPort)
+	}
 	log.Info("Listen: %v://%s%s", setting.Protocol, listenAddr, setting.AppSubUrl)
+
+	var err error
 	switch setting.Protocol {
 	case setting.HTTP:
 		err = http.ListenAndServe(listenAddr, m)
@@ -588,6 +599,21 @@ func runWeb(ctx *cli.Context) error {
 		err = server.ListenAndServeTLS(setting.CertFile, setting.KeyFile)
 	case setting.FCGI:
 		err = fcgi.Serve(nil, m)
+	case setting.UNIX_SOCKET:
+		os.Remove(listenAddr)
+
+		var listener *net.UnixListener
+		listener, err = net.ListenUnix("unix", &net.UnixAddr{listenAddr, "unix"})
+		if err != nil {
+			break // Handle error after switch
+		}
+
+		// FIXME: add proper implementation of signal capture on all protocols
+		// execute this on SIGTERM or SIGINT: listener.Close()
+		if err = os.Chmod(listenAddr, os.FileMode(setting.UnixSocketPermission)); err != nil {
+			log.Fatal(4, "Failed to set permission of unix socket: %v", err)
+		}
+		err = http.Serve(listener, m)
 	default:
 		log.Fatal(4, "Invalid protocol: %s", setting.Protocol)
 	}

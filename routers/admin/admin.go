@@ -216,12 +216,15 @@ func Config(ctx *context.Context) {
 	}
 
 	ctx.Data["CacheAdapter"] = setting.CacheAdapter
-	ctx.Data["CacheInternal"] = setting.CacheInternal
+	ctx.Data["CacheInterval"] = setting.CacheInterval
 	ctx.Data["CacheConn"] = setting.CacheConn
 
 	ctx.Data["SessionConfig"] = setting.SessionConfig
 
 	ctx.Data["DisableGravatar"] = setting.DisableGravatar
+	ctx.Data["EnableFederatedAvatar"] = setting.EnableFederatedAvatar
+
+	ctx.Data["Git"] = setting.Git
 
 	type logger struct {
 		Mode, Config string

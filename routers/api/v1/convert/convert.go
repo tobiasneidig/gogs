@@ -69,15 +69,31 @@ func ToBranch(b *models.Branch, c *git.Commit) *api.Branch {
 }
 
 func ToCommit(c *git.Commit) *api.PayloadCommit {
+	authorUsername := ""
+	author, err := models.GetUserByEmail(c.Author.Email)
+	if err == nil {
+		authorUsername = author.Name
+	}
+	committerUsername := ""
+	committer, err := models.GetUserByEmail(c.Committer.Email)
+	if err == nil {
+		committerUsername = committer.Name
+	}
 	return &api.PayloadCommit{
 		ID:      c.ID.String(),
 		Message: c.Message(),
 		URL:     "Not implemented",
 		Author: &api.PayloadAuthor{
-			Name:  c.Committer.Name,
-			Email: c.Committer.Email,
-			/* UserName: c.Committer.UserName, */
+			Name:     c.Author.Name,
+			Email:    c.Author.Email,
+			UserName: authorUsername,
 		},
+		Committer: &api.PayloadCommitter{
+			Name:     c.Committer.Name,
+			Email:    c.Committer.Email,
+			UserName: committerUsername,
+		},
+		Timestamp: c.Author.When,
 	}
 }
 
@@ -129,6 +145,7 @@ func ToDeployKey(apiLink string, key *models.DeployKey) *api.DeployKey {
 
 func ToLabel(label *models.Label) *api.Label {
 	return &api.Label{
+		ID:    label.ID,
 		Name:  label.Name,
 		Color: label.Color,
 	}

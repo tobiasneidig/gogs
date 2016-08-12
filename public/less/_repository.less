@@ -59,7 +59,7 @@
 			}
 			.item {
 				padding: 0px;
-			}			
+			}
 			.label.color {
 				padding: 0 8px;
 				margin-right: 5px;
@@ -180,8 +180,12 @@
 				.octicon {
 					margin-left: 3px;
 					margin-right: 5px;
+					color: #777;
 					&.octicon-mail-reply {
 						margin-right: 10px;
+					}
+					&.octicon-file-directory, &.octicon-file-submodule {
+						color: #1e70bf;
 					}
 				}
 			}
@@ -247,6 +251,8 @@
 						padding: 0 !important;
 						li {
 							padding-left: 5px;
+							display: inline-block;
+							width: 100%;
 							&.active {
 								background: #ffffdd;
 							}
@@ -456,6 +462,13 @@
 							width: auto;
 							margin: 0;
 							vertical-align: middle;
+						}
+						span.ui.image {
+							font-size: 8vw;
+							color: #000000;
+						}
+						span.ui.image:hover {
+							color: #000000;
 						}
 					}
 				}

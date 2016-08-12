@@ -90,7 +90,7 @@ var (
 	IssueAlphanumericPattern = regexp.MustCompile(`( |^|\()[A-Z]{1,10}-[1-9][0-9]*\b`)
 
 	// Sha1CurrentPattern matches string that represents a commit SHA, e.g. d8a994ef243349f321568f9e36d5c3f444b99cae
-	Sha1CurrentPattern = regexp.MustCompile(`\b[0-9a-f]{40}\b`)
+	Sha1CurrentPattern = regexp.MustCompile(`\b[0-9a-f]{7,40}\b`)
 )
 
 // FindAllMentions matches mention patterns in given content
@@ -260,12 +260,9 @@ func RenderIssueIndexPattern(rawBytes []byte, urlPrefix string, metas map[string
 
 // RenderSha1CurrentPattern renders SHA1 strings to corresponding links that assumes in the same repository.
 func RenderSha1CurrentPattern(rawBytes []byte, urlPrefix string) []byte {
-	ms := Sha1CurrentPattern.FindAll(rawBytes, -1)
-	for _, m := range ms {
-		rawBytes = bytes.Replace(rawBytes, m, []byte(fmt.Sprintf(
-			`<a href="%s/commit/%s"><code>%s</code></a>`, urlPrefix, m, base.ShortSha(string(m)))), -1)
-	}
-	return rawBytes
+	return []byte(Sha1CurrentPattern.ReplaceAllStringFunc(string(rawBytes[:]), func(m string) string {
+		return fmt.Sprintf(`<a href="%s/commit/%s"><code>%s</code></a>`, urlPrefix, m, base.ShortSha(string(m)))
+	}))
 }
 
 // RenderSpecialLink renders mentions, indexes and SHA1 strings to corresponding links.

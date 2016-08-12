@@ -160,7 +160,13 @@ func (i *Issue) State() string {
 }
 
 func (issue *Issue) FullLink() string {
-	return fmt.Sprintf("%s/issues/%d", issue.Repo.FullLink(), issue.Index)
+	var path string
+	if issue.IsPull {
+		path = "pulls"
+	} else {
+		path = "issues"
+	}
+	return fmt.Sprintf("%s/%s/%d", issue.Repo.FullLink(), path, issue.Index)
 }
 
 // IsPoster returns true if given user by ID is the poster.
@@ -181,7 +187,7 @@ func (i *Issue) addLabel(e *xorm.Session, label *Label, doer *User) error {
 	return newIssueLabel(e, i, label, doer)
 }
 
-// AddLabel adds new label to issue by given ID.
+// AddLabel adds a new label to the issue.
 func (i *Issue) AddLabel(label *Label, doer *User) (err error) {
 	sess := x.NewSession()
 	defer sessionRelease(sess)
@@ -196,52 +202,76 @@ func (i *Issue) AddLabel(label *Label, doer *User) (err error) {
 	return sess.Commit()
 }
 
-func (i *Issue) getLabels(e Engine) (err error) {
-	if len(i.Labels) > 0 {
+func (issue *Issue) addLabels(e *xorm.Session, labels []*Label) error {
+	return newIssueLabels(e, issue, labels)
+}
+
+// AddLabels adds a list of new labels to the issue.
+func (issue *Issue) AddLabels(labels []*Label) error {
+	return NewIssueLabels(issue, labels)
+}
+
+func (issue *Issue) getLabels(e Engine) (err error) {
+	if len(issue.Labels) > 0 {
 		return nil
 	}
 
-	i.Labels, err = getLabelsByIssueID(e, i.ID)
+	issue.Labels, err = getLabelsByIssueID(e, issue.ID)
 	if err != nil {
 		return fmt.Errorf("getLabelsByIssueID: %v", err)
 	}
 	return nil
 }
 
-func (i *Issue) removeLabel(e *xorm.Session, label *Label, doer *User) error {
-	return deleteIssueLabel(e, i, label, doer)
+func (issue *Issue) removeLabel(e *xorm.Session, label *Label, doer *User) error {
+	return deleteIssueLabel(e, issue, label, doer)
 }
 
 // RemoveLabel removes a label from issue by given ID.
-func (i *Issue) RemoveLabel(label *Label, doer *User) (err error) {
+func (issue *Issue) RemoveLabel(label *Label, doer *User) (err error) {
+	return DeleteIssueLabel(issue, label, doer)
+}
+
+func (issue *Issue) clearLabels(e *xorm.Session, doer *User) (err error) {
+	if err = issue.getLabels(e); err != nil {
+		return fmt.Errorf("getLabels: %v", err)
+	}
+
+	for i := range issue.Labels {
+		if err = issue.removeLabel(e, issue.Labels[i], doer); err != nil {
+			return fmt.Errorf("removeLabel: %v", err)
+		}
+	}
+
+	return nil
+}
+
+func (issue *Issue) ClearLabels(doer *User) (err error) {
 	sess := x.NewSession()
 	defer sessionRelease(sess)
 	if err = sess.Begin(); err != nil {
 		return err
 	}
 
-	if err = i.removeLabel(sess, label, doer); err != nil {
+	if err = issue.clearLabels(sess, doer); err != nil {
 		return err
 	}
 
 	return sess.Commit()
 }
 
-func (i *Issue) ClearLabels(doer *User) (err error) {
+// ReplaceLabels removes all current labels and add new labels to the issue.
+func (issue *Issue) ReplaceLabels(labels []*Label, doer *User) (err error) {
 	sess := x.NewSession()
 	defer sessionRelease(sess)
 	if err = sess.Begin(); err != nil {
 		return err
 	}
 
-	if err = i.getLabels(sess); err != nil {
-		return err
-	}
-
-	for idx := range i.Labels {
-		if err = i.removeLabel(sess, i.Labels[idx], doer); err != nil {
-			return err
-		}
+	if err = issue.clearLabels(sess, doer); err != nil {
+		return fmt.Errorf("clearLabels: %v", err)
+	} else if err = issue.addLabels(sess, labels, doer); err != nil {
+		return fmt.Errorf("addLabels: %v", err)
 	}
 
 	return sess.Commit()
@@ -881,7 +911,7 @@ func GetUserIssueStats(repoID, uid int64, repoIDs []int64, filterMode int, isPul
 		Count(&Issue{})
 
 	stats.CreateCount, _ = countSession(false, isPull, repoID, repoIDs).
-		And("assignee_id = ?", uid).
+		And("poster_id = ?", uid).
 		Count(&Issue{})
 
 	openCountSession := countSession(false, isPull, repoID, repoIDs)

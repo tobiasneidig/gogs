@@ -12,6 +12,7 @@ import (
 	"path"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -20,6 +21,7 @@ import (
 	_ "github.com/go-macaron/cache/redis"
 	"github.com/go-macaron/session"
 	_ "github.com/go-macaron/session/redis"
+	"github.com/strk/go-libravatar"
 	"gopkg.in/ini.v1"
 
 	"github.com/gogits/gogs/modules/bindata"
@@ -30,9 +32,10 @@ import (
 type Scheme string
 
 const (
-	HTTP  Scheme = "http"
-	HTTPS Scheme = "https"
-	FCGI  Scheme = "fcgi"
+	HTTP        Scheme = "http"
+	HTTPS       Scheme = "https"
+	FCGI        Scheme = "fcgi"
+	UNIX_SOCKET Scheme = "unix"
 )
 
 type LandingPage string
@@ -57,16 +60,17 @@ var (
 	AppDataPath    string
 
 	// Server settings
-	Protocol           Scheme
-	Domain             string
-	HttpAddr, HttpPort string
-	LocalURL           string
-	OfflineMode        bool
-	DisableRouterLog   bool
-	CertFile, KeyFile  string
-	StaticRootPath     string
-	EnableGzip         bool
-	LandingPageUrl     LandingPage
+	Protocol             Scheme
+	Domain               string
+	HTTPAddr, HTTPPort   string
+	LocalURL             string
+	OfflineMode          bool
+	DisableRouterLog     bool
+	CertFile, KeyFile    string
+	StaticRootPath       string
+	EnableGzip           bool
+	LandingPageUrl       LandingPage
+	UnixSocketPermission uint32
 
 	SSH struct {
 		Disabled            bool           `ini:"DISABLE_SSH"`
@@ -140,9 +144,11 @@ var (
 	}
 
 	// Picture settings
-	AvatarUploadPath string
-	GravatarSource   string
-	DisableGravatar  bool
+	AvatarUploadPath      string
+	GravatarSource        string
+	DisableGravatar       bool
+	EnableFederatedAvatar bool
+	LibravatarService     *libravatar.Libravatar
 
 	// Log settings
 	LogRootPath string
@@ -161,7 +167,7 @@ var (
 
 	// Cache settings
 	CacheAdapter  string
-	CacheInternal int
+	CacheInterval int
 	CacheConn     string
 
 	// Session settings
@@ -191,16 +197,23 @@ var (
 
 	// Git settings
 	Git struct {
+		DisableDiffHighlight     bool
 		MaxGitDiffLines          int
 		MaxGitDiffLineCharacters int
 		MaxGitDiffFiles          int
-		GcArgs                   []string `delim:" "`
+		GCArgs                   []string `delim:" "`
 		Timeout                  struct {
 			Migrate int
 			Mirror  int
 			Clone   int
 			Pull    int
+			GC      int `ini:"GC"`
 		} `ini:"git.timeout"`
+	}
+
+	// Mirror settings
+	Mirror struct {
+		DefaultInterval int
 	}
 
 	// API settings
@@ -280,6 +293,19 @@ func forcePathSeparator(path string) {
 	}
 }
 
+// IsRunUserMatchCurrentUser returns false if configured run user does not match
+// actual user that runs the app. The first return value is the actual user name.
+// This check is ignored under Windows since SSH remote login is not the main
+// method to login on Windows.
+func IsRunUserMatchCurrentUser(runUser string) (string, bool) {
+	if IsWindows {
+		return "", true
+	}
+
+	currentUser := user.CurrentUsername()
+	return currentUser, runUser == currentUser
+}
+
 // NewContext initializes configuration context.
 // NOTE: do not print any log except error.
 func NewContext() {
@@ -333,6 +359,7 @@ func NewContext() {
 		log.Fatal(4, "Invalid ROOT_URL '%s': %s", AppUrl, err)
 	}
 	// Suburl should start with '/' and end without '/', such as '/{subpath}'.
+	// This value is empty if site does not have sub-url.
 	AppSubUrl = strings.TrimSuffix(url.Path, "/")
 	AppSubUrlDepth = strings.Count(AppSubUrl, "/")
 
@@ -343,11 +370,19 @@ func NewContext() {
 		KeyFile = sec.Key("KEY_FILE").String()
 	} else if sec.Key("PROTOCOL").String() == "fcgi" {
 		Protocol = FCGI
+	} else if sec.Key("PROTOCOL").String() == "unix" {
+		Protocol = UNIX_SOCKET
+		UnixSocketPermissionRaw := sec.Key("UNIX_SOCKET_PERMISSION").MustString("666")
+		UnixSocketPermissionParsed, err := strconv.ParseUint(UnixSocketPermissionRaw, 8, 32)
+		if err != nil || UnixSocketPermissionParsed > 0777 {
+			log.Fatal(4, "Fail to parse unixSocketPermission: %s", UnixSocketPermissionRaw)
+		}
+		UnixSocketPermission = uint32(UnixSocketPermissionParsed)
 	}
 	Domain = sec.Key("DOMAIN").MustString("localhost")
-	HttpAddr = sec.Key("HTTP_ADDR").MustString("0.0.0.0")
-	HttpPort = sec.Key("HTTP_PORT").MustString("3000")
-	LocalURL = sec.Key("LOCAL_ROOT_URL").MustString(string(Protocol) + "://localhost:" + HttpPort + "/")
+	HTTPAddr = sec.Key("HTTP_ADDR").MustString("0.0.0.0")
+	HTTPPort = sec.Key("HTTP_PORT").MustString("3000")
+	LocalURL = sec.Key("LOCAL_ROOT_URL").MustString(string(Protocol) + "://localhost:" + HTTPPort + "/")
 	OfflineMode = sec.Key("OFFLINE_MODE").MustBool()
 	DisableRouterLog = sec.Key("DISABLE_ROUTER_LOG").MustBool()
 	StaticRootPath = sec.Key("STATIC_ROOT_PATH").MustString(workDir)
@@ -425,10 +460,12 @@ func NewContext() {
 	}[Cfg.Section("time").Key("FORMAT").MustString("RFC1123")]
 
 	RunUser = Cfg.Section("").Key("RUN_USER").String()
-	curUser := user.CurrentUsername()
 	// Does not check run user when the install lock is off.
-	if InstallLock && RunUser != curUser {
-		log.Fatal(4, "Expect user(%s) but current user is: %s", RunUser, curUser)
+	if InstallLock {
+		currentUser, match := IsRunUserMatchCurrentUser(RunUser)
+		if !match {
+			log.Fatal(4, "Expect user '%s' but current user is: %s", RunUser, currentUser)
+		}
 	}
 
 	// Determine and create root git repository path.
@@ -460,8 +497,27 @@ func NewContext() {
 		GravatarSource = source
 	}
 	DisableGravatar = sec.Key("DISABLE_GRAVATAR").MustBool()
+	EnableFederatedAvatar = sec.Key("ENABLE_FEDERATED_AVATAR").MustBool()
 	if OfflineMode {
 		DisableGravatar = true
+		EnableFederatedAvatar = false
+	}
+	if DisableGravatar {
+		EnableFederatedAvatar = false
+	}
+
+	if EnableFederatedAvatar {
+		LibravatarService = libravatar.New()
+		parts := strings.Split(GravatarSource, "/")
+		if len(parts) >= 3 {
+			if parts[0] == "https:" {
+				LibravatarService.SetUseHTTPS(true)
+				LibravatarService.SetSecureFallbackHost(parts[2])
+			} else {
+				LibravatarService.SetUseHTTPS(false)
+				LibravatarService.SetFallbackHost(parts[2])
+			}
+		}
 	}
 
 	if err = Cfg.Section("ui").MapTo(&UI); err != nil {
@@ -472,8 +528,14 @@ func NewContext() {
 		log.Fatal(4, "Fail to map Cron settings: %v", err)
 	} else if err = Cfg.Section("git").MapTo(&Git); err != nil {
 		log.Fatal(4, "Fail to map Git settings: %v", err)
+	} else if err = Cfg.Section("mirror").MapTo(&Mirror); err != nil {
+		log.Fatal(4, "Fail to map API settings: %v", err)
 	} else if err = Cfg.Section("api").MapTo(&API); err != nil {
 		log.Fatal(4, "Fail to map API settings: %v", err)
+	}
+
+	if Mirror.DefaultInterval <= 0 {
+		Mirror.DefaultInterval = 24
 	}
 
 	Langs = Cfg.Section("i18n").Key("LANGS").Strings(",")
@@ -594,7 +656,7 @@ func newCacheService() {
 	CacheAdapter = Cfg.Section("cache").Key("ADAPTER").In("memory", []string{"memory", "redis", "memcache"})
 	switch CacheAdapter {
 	case "memory":
-		CacheInternal = Cfg.Section("cache").Key("INTERVAL").MustInt(60)
+		CacheInterval = Cfg.Section("cache").Key("INTERVAL").MustInt(60)
 	case "redis", "memcache":
 		CacheConn = strings.Trim(Cfg.Section("cache").Key("HOST").String(), "\" ")
 	default:
