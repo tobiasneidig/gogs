@@ -5,6 +5,7 @@
 package models
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -33,6 +34,8 @@ const (
 	COMMENT_TYPE_COMMENT_REF
 	// Reference from a pull request
 	COMMENT_TYPE_PULL_REF
+	// Labels were modified
+	COMMENT_TYPE_LABELS_MODIFIED
 )
 
 type CommentTag int
@@ -55,6 +58,7 @@ type Comment struct {
 	Line            int64
 	Content         string `xorm:"TEXT"`
 	RenderedContent string `xorm:"-"`
+	ParsedContent	interface{} `xorm:"-"`
 
 	Created     time.Time `xorm:"-"`
 	CreatedUnix int64
@@ -250,6 +254,69 @@ func createStatusComment(e *xorm.Session, doer *User, repo *Repository, issue *I
 		Repo:  repo,
 		Issue: issue,
 	})
+}
+
+// createLabelComment creates a label added/removed comment to issue.
+func createLabelComment(e *xorm.Session, doer *User, repo *Repository, issue *Issue, label *Label, added bool) (*Comment, error){
+	issue.Repo.Owner = issue.Repo.MustOwner()
+	var labelsInfo map[string][]*Label
+	var lastComment *Comment
+	if len(issue.Comments) != 0 {
+		lastComment = issue.Comments[len(issue.Comments) - 1]
+		if lastComment.Type == COMMENT_TYPE_LABELS_MODIFIED && lastComment.PosterID == doer.ID {
+			err := json.Unmarshal([]byte(issue.Comments[len(issue.Comments) - 1].Content), &labelsInfo)
+			if err != nil {
+				log.Error(4, "Cannot parse labels info:", err)
+				labelsInfo = nil
+			}
+		} else {
+			lastComment = nil
+		}
+	}
+
+	// create plain map if necessary
+	if labelsInfo == nil {
+		labelsInfo = make(map[string][]*Label)
+		labelsInfo["added"] = make([]*Label, 0)
+		labelsInfo["removed"] = make([]*Label, 0)
+	}
+
+	// choose the right array
+	labelsArray := labelsInfo["added"]
+	if !added {
+		labelsArray = labelsInfo["removed"]
+	}
+
+	// add label only if not in array right now
+	labelAlreadyInArray := false
+	for _, labelInArray := range labelsArray {
+        if labelInArray.ID == label.ID {
+            labelAlreadyInArray = true
+        }
+    }
+    if !labelAlreadyInArray && added {
+		labelsInfo["added"] = append(labelsArray, label)
+    } else if !labelAlreadyInArray {
+    	labelsInfo["removed"] = append(labelsArray, label)
+    }
+
+    // store the new entry
+	labelsInfoJson, err := json.Marshal(labelsInfo)
+	if err != nil {
+		return nil, err
+	}
+	if lastComment == nil {
+		return createComment(e, &CreateCommentOptions{
+			Type:  COMMENT_TYPE_LABELS_MODIFIED,
+			Doer:  doer,
+			Repo:  repo,
+			Issue: issue,
+			Content: string(labelsInfoJson),
+		})
+	} else {
+		lastComment.Content = string(labelsInfoJson)
+		return lastComment, UpdateComment(lastComment)
+	}
 }
 
 type CreateCommentOptions struct {

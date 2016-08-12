@@ -177,19 +177,19 @@ func (i *Issue) HasLabel(labelID int64) bool {
 	return i.hasLabel(x, labelID)
 }
 
-func (i *Issue) addLabel(e *xorm.Session, label *Label) error {
-	return newIssueLabel(e, i, label)
+func (i *Issue) addLabel(e *xorm.Session, label *Label, doer *User) error {
+	return newIssueLabel(e, i, label, doer)
 }
 
 // AddLabel adds new label to issue by given ID.
-func (i *Issue) AddLabel(label *Label) (err error) {
+func (i *Issue) AddLabel(label *Label, doer *User) (err error) {
 	sess := x.NewSession()
 	defer sessionRelease(sess)
 	if err = sess.Begin(); err != nil {
 		return err
 	}
 
-	if err = i.addLabel(sess, label); err != nil {
+	if err = i.addLabel(sess, label, doer); err != nil {
 		return err
 	}
 
@@ -208,26 +208,26 @@ func (i *Issue) getLabels(e Engine) (err error) {
 	return nil
 }
 
-func (i *Issue) removeLabel(e *xorm.Session, label *Label) error {
-	return deleteIssueLabel(e, i, label)
+func (i *Issue) removeLabel(e *xorm.Session, label *Label, doer *User) error {
+	return deleteIssueLabel(e, i, label, doer)
 }
 
 // RemoveLabel removes a label from issue by given ID.
-func (i *Issue) RemoveLabel(label *Label) (err error) {
+func (i *Issue) RemoveLabel(label *Label, doer *User) (err error) {
 	sess := x.NewSession()
 	defer sessionRelease(sess)
 	if err = sess.Begin(); err != nil {
 		return err
 	}
 
-	if err = i.removeLabel(sess, label); err != nil {
+	if err = i.removeLabel(sess, label, doer); err != nil {
 		return err
 	}
 
 	return sess.Commit()
 }
 
-func (i *Issue) ClearLabels() (err error) {
+func (i *Issue) ClearLabels(doer *User) (err error) {
 	sess := x.NewSession()
 	defer sessionRelease(sess)
 	if err = sess.Begin(); err != nil {
@@ -239,7 +239,7 @@ func (i *Issue) ClearLabels() (err error) {
 	}
 
 	for idx := range i.Labels {
-		if err = i.removeLabel(sess, i.Labels[idx]); err != nil {
+		if err = i.removeLabel(sess, i.Labels[idx], doer); err != nil {
 			return err
 		}
 	}
@@ -370,7 +370,7 @@ func newIssue(e *xorm.Session, repo *Repository, issue *Issue, labelIDs []int64,
 				continue
 			}
 
-			if err = issue.addLabel(e, label); err != nil {
+			if err = issue.addLabel(e, label, nil); err != nil {
 				return fmt.Errorf("addLabel: %v", err)
 			}
 		}

@@ -5,6 +5,7 @@
 package repo
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -630,6 +631,14 @@ func ViewIssue(ctx *context.Context) {
 			if !isAdded && !issue.IsPoster(comment.Poster.ID) {
 				participants = append(participants, comment.Poster)
 			}
+		} else if comment.Type == models.COMMENT_TYPE_LABELS_MODIFIED {
+			var labelsInfo map[string][]*models.Label
+			err := json.Unmarshal([]byte(comment.Content), &labelsInfo)
+			if err != nil {
+				log.Error(4, "Cannot parse labels info:", err)
+			}else{
+				comment.ParsedContent = labelsInfo
+			}
 		}
 	}
 
@@ -713,7 +722,7 @@ func UpdateIssueLabel(ctx *context.Context) {
 	}
 
 	if ctx.Query("action") == "clear" {
-		if err := issue.ClearLabels(); err != nil {
+		if err := issue.ClearLabels(ctx.User); err != nil {
 			ctx.Handle(500, "ClearLabels", err)
 			return
 		}
@@ -730,12 +739,12 @@ func UpdateIssueLabel(ctx *context.Context) {
 		}
 
 		if isAttach && !issue.HasLabel(label.ID) {
-			if err = issue.AddLabel(label); err != nil {
+			if err = issue.AddLabel(label, ctx.User); err != nil {
 				ctx.Handle(500, "AddLabel", err)
 				return
 			}
 		} else if !isAttach && issue.HasLabel(label.ID) {
-			if err = issue.RemoveLabel(label); err != nil {
+			if err = issue.RemoveLabel(label, ctx.User); err != nil {
 				ctx.Handle(500, "RemoveLabel", err)
 				return
 			}

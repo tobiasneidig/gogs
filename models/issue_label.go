@@ -163,7 +163,7 @@ func HasIssueLabel(issueID, labelID int64) bool {
 	return hasIssueLabel(x, issueID, labelID)
 }
 
-func newIssueLabel(e *xorm.Session, issue *Issue, label *Label) (err error) {
+func newIssueLabel(e *xorm.Session, issue *Issue, label *Label, doer *User) (err error) {
 	if _, err = e.Insert(&IssueLabel{
 		IssueID: issue.ID,
 		LabelID: label.ID,
@@ -175,18 +175,26 @@ func newIssueLabel(e *xorm.Session, issue *Issue, label *Label) (err error) {
 	if issue.IsClosed {
 		label.NumClosedIssues++
 	}
+	
+	// New action comment
+	if(doer != nil){
+		_, err := createLabelComment(e, doer, issue.Repo, issue, label, true)
+		if(err != nil){
+			return err
+		}
+	}
 	return updateLabel(e, label)
 }
 
 // NewIssueLabel creates a new issue-label relation.
-func NewIssueLabel(issue *Issue, label *Label) (err error) {
+func NewIssueLabel(issue *Issue, label *Label, doer *User) (err error) {
 	sess := x.NewSession()
 	defer sessionRelease(sess)
 	if err = sess.Begin(); err != nil {
 		return err
 	}
 
-	if err = newIssueLabel(sess, issue, label); err != nil {
+	if err = newIssueLabel(sess, issue, label, doer); err != nil {
 		return err
 	}
 
@@ -203,7 +211,7 @@ func GetIssueLabels(issueID int64) ([]*IssueLabel, error) {
 	return getIssueLabels(x, issueID)
 }
 
-func deleteIssueLabel(e *xorm.Session, issue *Issue, label *Label) (err error) {
+func deleteIssueLabel(e *xorm.Session, issue *Issue, label *Label, doer *User) (err error) {
 	if _, err = e.Delete(&IssueLabel{
 		IssueID: issue.ID,
 		LabelID: label.ID,
@@ -215,18 +223,26 @@ func deleteIssueLabel(e *xorm.Session, issue *Issue, label *Label) (err error) {
 	if issue.IsClosed {
 		label.NumClosedIssues--
 	}
+
+	// New action comment
+	if(doer != nil){
+		_, err := createLabelComment(e, doer, issue.Repo, issue, label, false)
+		if(err != nil){
+			return err
+		}
+	}
 	return updateLabel(e, label)
 }
 
 // DeleteIssueLabel deletes issue-label relation.
-func DeleteIssueLabel(issue *Issue, label *Label) (err error) {
+func DeleteIssueLabel(issue *Issue, label *Label, doer *User) (err error) {
 	sess := x.NewSession()
 	defer sessionRelease(sess)
 	if err = sess.Begin(); err != nil {
 		return err
 	}
 
-	if err = deleteIssueLabel(sess, issue, label); err != nil {
+	if err = deleteIssueLabel(sess, issue, label, doer); err != nil {
 		return err
 	}
 

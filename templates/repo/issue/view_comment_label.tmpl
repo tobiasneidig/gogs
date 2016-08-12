@@ -1,0 +1,36 @@
+{{ $addedLength := len .added }}
+{{ $removedLength := len .removed }}
+
+{{ if gt $addedLength 0 }}
+	added
+	{{ if eq $addedLength 1 }}
+		the
+	{{ end }}
+	{{range .added}}
+		<span class="ui label" style="background-color:{{ .Color }};color:{{ .ForegroundColor }}">{{ .Name }}</span>
+	{{end}}
+
+	{{ if eq $addedLength 1 }}
+		label
+	{{ else }}
+		labels
+	{{ end }}
+
+	{{ if gt $removedLength 0 }}
+		and
+	{{ end }}
+{{end}}
+{{ if gt $removedLength 0 }}
+	removed 
+	{{ if eq $removedLength 1 }}
+		the
+	{{ end }}
+	{{range .removed}}
+		<span class="ui label" style="background-color:{{ .Color }};color:{{ .ForegroundColor }}">{{ .Name }}</span>
+	{{end}}
+	{{ if eq $removedLength 1 }}
+		label
+	{{ else }}
+		labels
+	{{ end }}
+{{ end }}
